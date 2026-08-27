@@ -152,6 +152,9 @@ export default function ContactPhotoField({
 
     if (!ACCEPTED.has(file.type)) {
       setLocalError(PHOTO_WRONG_TYPE);
+      // Taking a ticket above superseded any encode still running, so nothing
+      // is left to finish — clear busy here or the form stays locked forever.
+      setBusyState(false);
       return;
     }
 
