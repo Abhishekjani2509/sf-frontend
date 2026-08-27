@@ -79,8 +79,8 @@ export default function ContactForm({
             Photo
           </h2>
           <p className="text-[13px] text-muted-foreground">
-            A square image works best. Without one, the contact shows their
-            initials.
+            Optional. A square image works best — without one, the contact
+            shows their initials.
           </p>
         </div>
 

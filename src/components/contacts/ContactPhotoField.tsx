@@ -27,10 +27,43 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** True if any pixel is not fully opaque, i.e. flattening to JPEG would show. */
+function hasTransparency(context: CanvasRenderingContext2D, width: number, height: number) {
+  const { data } = context.getImageData(0, 0, width, height);
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 255) return true;
+  }
+  return false;
+}
+
 /**
- * Shrink an image to `PHOTO_MAX_DIMENSION` on its longest edge before encoding.
+ * Encode the canvas as small as it can go while still fitting the cap.
  *
- * A phone photo is several MB and would blow the size cap, but it is also being
+ * PNG is lossless, so a downscaled photograph stays far too big — keeping the
+ * source type would make any photo saved as a PNG impossible to upload. PNG is
+ * therefore only used when the image actually has transparency to protect, and
+ * even then JPEG wins if the PNG will not fit.
+ */
+function encodeWithinCap(canvas: HTMLCanvasElement, transparent: boolean): string {
+  if (transparent) {
+    const png = canvas.toDataURL("image/png");
+    if (png.length <= PHOTO_MAX_CHARS) return png;
+  }
+
+  let jpeg = "";
+  for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+    jpeg = canvas.toDataURL("image/jpeg", quality);
+    if (jpeg.length <= PHOTO_MAX_CHARS) return jpeg;
+  }
+  // Still over: hand it back and let the caller report the size error.
+  return jpeg;
+}
+
+/**
+ * Shrink an image to `PHOTO_MAX_DIMENSION` on its longest edge, then encode it
+ * as compactly as the cap requires.
+ *
+ * A phone photo is several MB and would blow the cap, but it is also being
  * rendered into a 56px circle — so the pixels are wasted twice over. Anything
  * canvas cannot safely re-encode falls back to the raw bytes and is left to the
  * size check.
@@ -48,22 +81,24 @@ async function encodePhoto(file: File): Promise<string> {
   }
 
   try {
+    // Scale down only when oversized, but still re-encode either way: a small
+    // image can be heavy, and the cap is about bytes rather than dimensions.
     const longest = Math.max(bitmap.width, bitmap.height);
-    if (longest <= PHOTO_MAX_DIMENSION) return readAsDataUrl(file);
+    const scale = longest > PHOTO_MAX_DIMENSION ? PHOTO_MAX_DIMENSION / longest : 1;
 
-    const scale = PHOTO_MAX_DIMENSION / longest;
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
 
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return readAsDataUrl(file);
 
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    // Keep PNG/WebP so transparency survives the circular crop; everything else
-    // is a photograph, where JPEG is dramatically smaller at the same quality.
-    const type = file.type === "image/jpeg" ? "image/jpeg" : file.type;
-    return canvas.toDataURL(type, 0.85);
+
+    const transparent =
+      file.type !== "image/jpeg" && hasTransparency(context, canvas.width, canvas.height);
+
+    return encodeWithinCap(canvas, transparent);
   } finally {
     bitmap.close();
   }
@@ -137,13 +172,8 @@ export default function ContactPhotoField({
 
   return (
     <div className="sm:col-span-2">
-      <span className="mb-1.5 block text-[13px] font-medium text-foreground">
-        Photo
-        <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
-          optional
-        </span>
-      </span>
-
+      {/* No label here: the enclosing fieldset is already headed "Photo", and
+          the file input carries its own accessible name. */}
       <div className="flex items-center gap-4">
         <ContactAvatar contact={preview} size="lg" />
 
