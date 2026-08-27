@@ -1,9 +1,15 @@
 import {
   CONTACT_FIELDS,
+  PHOTO_MAX_CHARS,
+  PHOTO_TOO_LARGE,
+  PHOTO_WRONG_TYPE,
   contactInputSchema,
   formDataToValues,
   zodFieldErrors,
 } from "@/lib/contacts/schema";
+
+const PNG_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 function values(overrides: Record<string, string> = {}) {
   return {
@@ -13,6 +19,7 @@ function values(overrides: Record<string, string> = {}) {
     phone: "",
     company: "",
     job_title: "",
+    photo: "",
     address: "",
     city: "",
     state: "",
@@ -80,7 +87,47 @@ describe("formDataToValues", () => {
     expect(extracted.first_name).toBe("Grace");
     expect(extracted.last_name).toBe("");
     expect(Object.keys(extracted).sort()).toEqual(
-      CONTACT_FIELDS.map((field) => field.name).sort(),
+      [...CONTACT_FIELDS.map((field) => field.name), "photo"].sort(),
     );
+  });
+
+  it("carries the photo through, so a full PUT cannot silently drop it", () => {
+    const formData = new FormData();
+    formData.set("photo", PNG_PIXEL);
+
+    expect(formDataToValues(formData).photo).toBe(PNG_PIXEL);
+  });
+});
+
+describe("photo validation", () => {
+  it("accepts an image data URL", () => {
+    const result = contactInputSchema.safeParse(values({ photo: PNG_PIXEL }));
+
+    expect(result.success).toBe(true);
+    expect(result.data!.photo).toBe(PNG_PIXEL);
+  });
+
+  it("treats a blank photo as no photo", () => {
+    const result = contactInputSchema.safeParse(values({ photo: "   " }));
+
+    expect(result.success).toBe(true);
+    expect(result.data!.photo).toBeNull();
+  });
+
+  it("rejects anything that is not an image data URL", () => {
+    const result = contactInputSchema.safeParse(
+      values({ photo: "https://example.com/ada.png" }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(zodFieldErrors(result.error!).photo).toBe(PHOTO_WRONG_TYPE);
+  });
+
+  it("rejects an image past the size cap", () => {
+    const oversized = `data:image/png;base64,${"A".repeat(PHOTO_MAX_CHARS)}`;
+    const result = contactInputSchema.safeParse(values({ photo: oversized }));
+
+    expect(result.success).toBe(false);
+    expect(zodFieldErrors(result.error!).photo).toBe(PHOTO_TOO_LARGE);
   });
 });
