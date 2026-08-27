@@ -116,49 +116,71 @@ export default function ContactPhotoField({
   contact,
   defaultValue,
   error,
+  onBusyChange,
 }: {
   contact?: Contact;
   defaultValue?: string;
   error?: string;
+  /** Lets the form block submission while an image is still being encoded. */
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [photo, setPhoto] = useState<string | null>(defaultValue || null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Encoding is async, so a slow pick can land after a newer pick or a remove.
+  // Every selection takes a ticket; only the current ticket may write state.
+  const ticketRef = useRef(0);
 
   const id = useId();
   const errorId = `${id}-error`;
   const message = localError ?? error;
 
+  function setBusyState(next: boolean) {
+    setBusy(next);
+    onBusyChange?.(next);
+  }
+
   async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    // Let the same file be re-picked after a remove.
+    event.target.value = "";
     if (!file) return;
+
+    const ticket = (ticketRef.current += 1);
 
     if (!ACCEPTED.has(file.type)) {
       setLocalError(PHOTO_WRONG_TYPE);
-      event.target.value = "";
       return;
     }
 
+    setBusyState(true);
     try {
       const dataUrl = await encodePhoto(file);
+      if (ticket !== ticketRef.current) return; // superseded — drop the result
+
       if (dataUrl.length > PHOTO_MAX_CHARS) {
         setLocalError(PHOTO_TOO_LARGE);
-        event.target.value = "";
         return;
       }
       setLocalError(null);
       setPhoto(dataUrl);
     } catch {
-      setLocalError("That image could not be read. Try another file.");
+      if (ticket === ticketRef.current) {
+        setLocalError("That image could not be read. Try another file.");
+      }
     } finally {
-      // Let the same file be re-picked after a remove.
-      event.target.value = "";
+      if (ticket === ticketRef.current) setBusyState(false);
     }
   }
 
   function handleRemove() {
+    // Invalidate anything in flight so it cannot resurrect the photo.
+    ticketRef.current += 1;
     setPhoto(null);
     setLocalError(null);
+    setBusyState(false);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -181,11 +203,12 @@ export default function ContactPhotoField({
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
+            disabled={busy}
             className={buttonClasses("secondary")}
             aria-describedby={message ? errorId : undefined}
           >
             <ImagePlus className="h-4 w-4" aria-hidden="true" />
-            {photo ? "Change photo" : "Add photo"}
+            {busy ? "Processing…" : photo ? "Change photo" : "Add photo"}
           </button>
 
           {photo ? (

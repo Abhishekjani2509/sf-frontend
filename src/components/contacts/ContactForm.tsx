@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
@@ -20,15 +20,23 @@ export type ContactFormAction = (
   formData: FormData,
 ) => Promise<FormState>;
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({
+  label,
+  blocked,
+}: {
+  label: string;
+  /** True while a photo is still encoding, so the save cannot outrun it. */
+  blocked?: boolean;
+}) {
   const { pending } = useFormStatus();
+  const busy = pending || blocked;
 
   return (
-    <Button type="submit" disabled={pending}>
-      {pending ? (
+    <Button type="submit" disabled={busy}>
+      {busy ? (
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
       ) : null}
-      {pending ? "Saving…" : label}
+      {pending ? "Saving…" : blocked ? "Preparing photo…" : label}
     </Button>
   );
 }
@@ -50,6 +58,9 @@ export default function ContactForm({
   cancelHref: string;
 }) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
+  // Encoding a photo is async; submitting mid-encode would serialise the old
+  // hidden value and silently save the wrong image.
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   function valueFor(name: keyof ContactInput): string {
     return state.values?.[name] ?? contact?.[name] ?? "";
@@ -89,6 +100,7 @@ export default function ContactForm({
             contact={contact}
             defaultValue={valueFor("photo")}
             error={state.fieldErrors?.photo}
+            onBusyChange={setPhotoBusy}
           />
         </div>
       </fieldset>
@@ -120,7 +132,7 @@ export default function ContactForm({
       ))}
 
       <div className="flex items-center gap-2 border-t border-hairline pt-4">
-        <SubmitButton label={submitLabel} />
+        <SubmitButton label={submitLabel} blocked={photoBusy} />
         <Link href={cancelHref} className={buttonClasses("secondary")}>
           Cancel
         </Link>
