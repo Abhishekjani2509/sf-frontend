@@ -29,6 +29,7 @@ const INPUT: ContactInput = {
   state: null,
   postal_code: null,
   country: null,
+  photo: null,
   notes: null,
 };
 

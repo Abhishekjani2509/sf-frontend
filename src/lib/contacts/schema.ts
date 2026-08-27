@@ -28,6 +28,19 @@ function requiredText(max: number, label: string) {
     .max(max, `${label} must be ${max} characters or fewer`);
 }
 
+/**
+ * Photo limits, mirroring `normalize_photo()` in the API's `app/schemas.py`.
+ * Keep the two in step: the API stays the authority, this just saves a round trip.
+ */
+export const PHOTO_MAX_CHARS = 256 * 1024;
+/** Longest edge kept when re-encoding, so an avatar never ships at camera size. */
+export const PHOTO_MAX_DIMENSION = 512;
+export const PHOTO_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
+const PHOTO_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+export const PHOTO_TOO_LARGE = `Photo must be ${PHOTO_MAX_CHARS / 1024} KiB or smaller once encoded`;
+export const PHOTO_WRONG_TYPE = "Photo must be a PNG, JPEG, GIF, or WebP image";
+
 export const contactInputSchema = z.object({
   first_name: requiredText(100, "First name"),
   last_name: requiredText(100, "Last name"),
@@ -46,6 +59,14 @@ export const contactInputSchema = z.object({
   state: optionalText(120, "State"),
   postal_code: optionalText(20, "Postal code"),
   country: optionalText(120, "Country"),
+  photo: z
+    .string()
+    .trim()
+    .transform((value) => value || null)
+    .nullable()
+    .default(null)
+    .refine((value) => value === null || value.length <= PHOTO_MAX_CHARS, PHOTO_TOO_LARGE)
+    .refine((value) => value === null || PHOTO_DATA_URL.test(value), PHOTO_WRONG_TYPE),
   notes: z
     .string()
     .trim()
@@ -214,14 +235,26 @@ export const CONTACT_FIELDS: ContactFieldSpec[] = CONTACT_FIELD_GROUPS.flatMap(
   (group) => group.fields,
 );
 
+/**
+ * Names the form submits that `CONTACT_FIELDS` does not describe.
+ *
+ * `photo` is rendered by `ContactPhotoField`, not by the metadata-driven
+ * `Field`, so it has no `ContactFieldSpec`. It still has to be read here:
+ * `saveContactAction` saves with a full `PUT`, so a photo missing from this
+ * record is a photo *deleted* from the contact.
+ */
+const EXTRA_FORM_FIELDS = ["photo"] as const satisfies readonly (keyof ContactInput)[];
+
 /** Pull the contact fields out of a submitted form, as raw strings. */
 export function formDataToValues(
   formData: FormData,
 ): Record<keyof ContactInput, string> {
+  const names: readonly (keyof ContactInput)[] = [
+    ...CONTACT_FIELDS.map((field) => field.name),
+    ...EXTRA_FORM_FIELDS,
+  ];
+
   return Object.fromEntries(
-    CONTACT_FIELDS.map((field) => [
-      field.name,
-      String(formData.get(field.name) ?? ""),
-    ]),
+    names.map((name) => [name, String(formData.get(name) ?? "")]),
   ) as Record<keyof ContactInput, string>;
 }
