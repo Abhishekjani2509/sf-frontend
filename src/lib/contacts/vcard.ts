@@ -7,11 +7,18 @@ import type { Contact } from "./types";
  * Outlook all import without complaint — 4.0 support is still patchy.
  */
 
+/** ADR types the 3.0 grammar allows; anything else ships without a TYPE. */
+const ADR_TYPES: Record<string, string | null> = {
+  home: "HOME",
+  work: "WORK",
+  other: null,
+};
+
 /** Escape the characters that carry structural meaning inside a value. */
 function escapeValue(value: string): string {
   return value
     .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\;")
+    .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
     .replace(/\r?\n/g, "\\n");
 }
@@ -76,7 +83,11 @@ export function buildVCard(contact: Contact): string {
       address.postal_code ?? "",
       address.country ?? "",
     ].map(escapeValue);
-    lines.push(`ADR;TYPE=${address.type.toUpperCase()}:${parts.join(";")}`);
+    // vCard 3.0 fixes the ADR type vocabulary (dom, intl, postal, parcel,
+    // home, work, pref). "OTHER" is not in it, so that case ships without a
+    // TYPE parameter rather than with an invalid one.
+    const type = ADR_TYPES[address.type];
+    lines.push(`ADR${type ? `;TYPE=${type}` : ""}:${parts.join(";")}`);
   }
 
   if (contact.photo) {

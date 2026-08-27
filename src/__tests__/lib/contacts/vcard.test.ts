@@ -41,6 +41,18 @@ describe("buildVCard", () => {
     expect(out).toContain("ADR;TYPE=HOME:;;12 Ockham Rd;London;;;UK");
   });
 
+  it("ships an 'other' address without an invalid TYPE parameter", () => {
+    const contact = makeContact({
+      addresses: [makeAddress({ type: "other", street: "PO Box 9", city: "Reno" })],
+    });
+
+    const out = lines(buildVCard(contact));
+
+    // vCard 3.0 has no OTHER in its ADR type vocabulary.
+    expect(out.some((line) => line.includes("TYPE=OTHER"))).toBe(false);
+    expect(out.some((line) => line.startsWith("ADR:"))).toBe(true);
+  });
+
   it("omits ADR entirely when the contact has no addresses", () => {
     const out = buildVCard(makeContact({ addresses: [] }));
 
@@ -60,7 +72,18 @@ describe("buildVCard", () => {
       makeContact({ notes: "Met at 5th, then 6th; see notes\\here" }),
     );
 
-    expect(out).toContain("NOTE:Met at 5th\\, then 6th\; see notes\\\\here");
+    // Written with explicit escapes: a bare "\\;" in a JS string is just ";",
+    // which is how the missing semicolon escape slipped past this test before.
+    expect(out).toContain(
+      "NOTE:Met at 5th" + "\\," + " then 6th" + "\\;" + " see notes" + "\\\\" + "here",
+    );
+  });
+
+  it("escapes a semicolon so it cannot split the value into fields", () => {
+    const out = buildVCard(makeContact({ company: "Babbage; Lovelace" }));
+
+    expect(out).toContain("ORG:Babbage" + "\\;" + " Lovelace");
+    expect(out).not.toContain("ORG:Babbage; Lovelace");
   });
 
   it("turns a newline in a note into an escaped sequence, not a real break", () => {
