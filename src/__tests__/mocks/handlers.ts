@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import { apiBaseUrl } from "@/lib/apiClient";
-import type { Contact, ContactPage } from "@/lib/contacts/types";
+import type { Address, Contact, ContactPage } from "@/lib/contacts/types";
 
 /** Prefix a path with the configured API base so handlers match apiClient URLs. */
 export function api(path: string): string {
@@ -19,13 +19,20 @@ export function makeContact(overrides: Partial<Contact> = {}): Contact {
     phone: "+1-415-555-0101",
     company: "Analytical Engines",
     job_title: "Mathematician",
-    address: null,
-    city: "San Francisco",
-    state: "CA",
-    postal_code: null,
-    country: "USA",
     photo: null,
     notes: null,
+    addresses: [
+      {
+        id: 1,
+        contact_id: 1,
+        type: "work",
+        street: null,
+        city: "San Francisco",
+        state: "CA",
+        postal_code: null,
+        country: "USA",
+      },
+    ],
     created_at: "2026-08-19T17:04:53.743932Z",
     updated_at: "2026-08-19T17:04:53.743936Z",
     full_name: `${first_name} ${last_name}`,
@@ -90,3 +97,17 @@ export const handlers = [
 
   http.delete(api("/api/v1/contacts/:id"), () => new HttpResponse(null, { status: 204 })),
 ];
+
+export function makeAddress(overrides: Partial<Address> = {}): Address {
+  return {
+    id: 1,
+    contact_id: 1,
+    type: "home",
+    street: null,
+    city: "San Francisco",
+    state: "CA",
+    postal_code: null,
+    country: "USA",
+    ...overrides,
+  };
+}

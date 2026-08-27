@@ -8,6 +8,7 @@ import DeleteContactButton from "@/components/contacts/DeleteContactButton";
 import { buttonClasses } from "@/components/ui/Button";
 import { getContact } from "@/lib/contacts/api";
 import { addressLine, formatTimestamp, jobLine } from "@/lib/contacts/format";
+import { ADDRESS_TYPE_LABELS } from "@/lib/contacts/types";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -43,7 +44,6 @@ export default async function ContactDetailPage({ params }: PageProps) {
   if (!contact) notFound();
 
   const subtitle = jobLine(contact);
-  const address = addressLine(contact);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
@@ -102,7 +102,20 @@ export default async function ContactDetailPage({ params }: PageProps) {
         </Row>
         <Row label="Company">{contact.company}</Row>
         <Row label="Job title">{contact.job_title}</Row>
-        <Row label="Address">{address}</Row>
+        <Row label="Addresses">
+          {contact.addresses.length ? (
+            <ul className="space-y-1.5">
+              {contact.addresses.map((address) => (
+                <li key={address.id} className="flex flex-wrap items-baseline gap-2">
+                  <span className="rounded border border-hairline px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {ADDRESS_TYPE_LABELS[address.type]}
+                  </span>
+                  <span>{addressLine(address) ?? "—"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Row>
         <Row label="Notes">
           {contact.notes ? (
             <span className="whitespace-pre-wrap">{contact.notes}</span>
