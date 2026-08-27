@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ContactInput } from "./types";
+import { ADDRESS_TYPES, type ContactInput } from "./types";
 
 /**
  * Client/server-shared validation for the contact form.
@@ -41,6 +41,35 @@ const PHOTO_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+
 export const PHOTO_TOO_LARGE = `Photo must be ${PHOTO_MAX_CHARS / 1024} KiB or smaller once encoded`;
 export const PHOTO_WRONG_TYPE = "Photo must be a PNG, JPEG, GIF, or WebP image";
 
+/**
+ * Addresses arrive as a JSON string from a hidden input, because the set is
+ * dynamic — a fixed `CONTACT_FIELDS` entry cannot describe "n rows the user can
+ * add and remove". Parsed and validated here so the server action still gets a
+ * typed value.
+ */
+export const addressInputSchema = z.object({
+  type: z.enum(ADDRESS_TYPES),
+  street: optionalText(300, "Street address"),
+  city: optionalText(120, "City"),
+  state: optionalText(120, "State"),
+  postal_code: optionalText(20, "Postal code"),
+  country: optionalText(120, "Country"),
+});
+
+export const addressesFieldSchema = z
+  .string()
+  .trim()
+  .default("[]")
+  .transform((raw, ctx) => {
+    try {
+      return JSON.parse(raw || "[]") as unknown;
+    } catch {
+      ctx.addIssue({ code: "custom", message: "Addresses could not be read" });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.array(addressInputSchema));
+
 export const contactInputSchema = z.object({
   first_name: requiredText(100, "First name"),
   last_name: requiredText(100, "Last name"),
@@ -54,11 +83,7 @@ export const contactInputSchema = z.object({
   phone: optionalText(40, "Phone"),
   company: optionalText(200, "Company"),
   job_title: optionalText(200, "Job title"),
-  address: optionalText(300, "Address"),
-  city: optionalText(120, "City"),
-  state: optionalText(120, "State"),
-  postal_code: optionalText(20, "Postal code"),
-  country: optionalText(120, "Country"),
+  addresses: addressesFieldSchema,
   photo: z
     .string()
     .trim()
@@ -96,7 +121,8 @@ export function zodFieldErrors(
 /* ------------------------------------------------------------------ */
 
 export interface ContactFieldSpec {
-  name: keyof ContactInput;
+  /** Text fields only — `addresses` is a list with its own component. */
+  name: Exclude<keyof ContactInput, "addresses">;
   label: string;
   type?: "text" | "email" | "tel" | "textarea";
   required?: boolean;
@@ -174,48 +200,6 @@ export const CONTACT_FIELD_GROUPS: ContactFieldGroup[] = [
     ],
   },
   {
-    title: "Address",
-    description: "Optional postal details.",
-    fields: [
-      {
-        name: "address",
-        label: "Street address",
-        maxLength: 300,
-        placeholder: "1 Market St, Suite 400",
-        autoComplete: "street-address",
-        wide: true,
-      },
-      {
-        name: "city",
-        label: "City",
-        maxLength: 120,
-        placeholder: "San Francisco",
-        autoComplete: "address-level2",
-      },
-      {
-        name: "state",
-        label: "State / region",
-        maxLength: 120,
-        placeholder: "CA",
-        autoComplete: "address-level1",
-      },
-      {
-        name: "postal_code",
-        label: "Postal code",
-        maxLength: 20,
-        placeholder: "94105",
-        autoComplete: "postal-code",
-      },
-      {
-        name: "country",
-        label: "Country",
-        maxLength: 120,
-        placeholder: "USA",
-        autoComplete: "country-name",
-      },
-    ],
-  },
-  {
     title: "Notes",
     description: "Anything worth remembering. No length limit.",
     fields: [
@@ -243,7 +227,7 @@ export const CONTACT_FIELDS: ContactFieldSpec[] = CONTACT_FIELD_GROUPS.flatMap(
  * `saveContactAction` saves with a full `PUT`, so a photo missing from this
  * record is a photo *deleted* from the contact.
  */
-const EXTRA_FORM_FIELDS = ["photo"] as const satisfies readonly (keyof ContactInput)[];
+const EXTRA_FORM_FIELDS = ["photo", "addresses"] as const satisfies readonly (keyof ContactInput)[];
 
 /** Pull the contact fields out of a submitted form, as raw strings. */
 export function formDataToValues(

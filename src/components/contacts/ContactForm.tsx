@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
 import Field from "@/components/ui/Field";
 import ContactPhotoField from "./ContactPhotoField";
+import ContactAddressesField from "./ContactAddressesField";
 import Button, { buttonClasses } from "@/components/ui/Button";
 import { CONTACT_FIELD_GROUPS } from "@/lib/contacts/schema";
 import {
@@ -62,7 +63,8 @@ export default function ContactForm({
   // hidden value and silently save the wrong image.
   const [photoBusy, setPhotoBusy] = useState(false);
 
-  function valueFor(name: keyof ContactInput): string {
+  /** Text fields only — `addresses` is a list and has its own component. */
+  function valueFor(name: Exclude<keyof ContactInput, "addresses">): string {
     return state.values?.[name] ?? contact?.[name] ?? "";
   }
 
@@ -103,6 +105,24 @@ export default function ContactForm({
             onBusyChange={setPhotoBusy}
           />
         </div>
+      </fieldset>
+
+      <fieldset className="space-y-4">
+        <legend className="sr-only">Addresses</legend>
+
+        <div className="border-b border-hairline pb-2">
+          <h2 className="font-display text-sm font-semibold text-foreground">
+            Addresses
+          </h2>
+          <p className="text-[13px] text-muted-foreground">
+            As many as you need — each one typed Home, Work, or Other.
+          </p>
+        </div>
+
+        <ContactAddressesField
+          defaultValue={contact?.addresses}
+          error={state.fieldErrors?.addresses}
+        />
       </fieldset>
 
       {CONTACT_FIELD_GROUPS.map((group) => (
