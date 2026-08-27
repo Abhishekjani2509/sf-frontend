@@ -71,7 +71,13 @@ export default function ContactAddressesField({
       {addresses.map((address, index) => (
         <fieldset
           key={index}
-          className="space-y-3 rounded-md border border-border p-4"
+          // Every group points at the shared message, so a screen reader user
+          // landing on any control after a failure hears why.
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className={`space-y-3 rounded-md border p-4 ${
+            error ? "border-destructive" : "border-border"
+          }`}
         >
           <legend className="sr-only">Address {index + 1}</legend>
 
@@ -89,6 +95,8 @@ export default function ContactAddressesField({
                 onChange={(event) =>
                   update(index, { type: event.target.value as AddressType })
                 }
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? errorId : undefined}
                 className={CONTROL}
               >
                 {ADDRESS_TYPES.map((type) => (
@@ -127,6 +135,8 @@ export default function ContactAddressesField({
                   onChange={(event) =>
                     update(index, { [part.name]: event.target.value || null })
                   }
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? errorId : undefined}
                   className={CONTROL}
                 />
               </div>
